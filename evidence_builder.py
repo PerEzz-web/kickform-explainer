@@ -165,6 +165,28 @@ def get_strong_positive_example(
 
     return format_team_match_example(team_name, wins[0])
 
+def interpret_correct_score(score: str, home_team: str, away_team: str) -> str:
+    """
+    Correct score format is always:
+    home goals - away goals
+    """
+    if not score or "-" not in score:
+        return f"{score}"
+
+    try:
+        home_goals_text, away_goals_text = score.split("-", 1)
+        home_goals = int(home_goals_text.strip())
+        away_goals = int(away_goals_text.strip())
+    except Exception:
+        return f"{score}"
+
+    if home_goals > away_goals:
+        return f"{score} means a {home_team} win: {home_team} {home_goals}, {away_team} {away_goals}."
+
+    if away_goals > home_goals:
+        return f"{score} means a {away_team} win: {home_team} {home_goals}, {away_team} {away_goals}."
+
+    return f"{score} means a draw: {home_team} {home_goals}, {away_team} {away_goals}."
 
 def format_h2h_example(match: Dict[str, Any]) -> str:
     date = format_date_short(match.get("date"))
@@ -324,15 +346,29 @@ def build_evidence(
 
     correct_scores = forecast.get("correct_score") or []
 
-    for score_item in correct_scores:
+    for index, score_item in enumerate(correct_scores):
         score = score_item.get("score")
         probability = score_item.get("probability")
 
         if score and probability is not None:
+            score_meaning = interpret_correct_score(score, home, away)
+
+            if index == 0:
+                claim = (
+                    f"The top correct-score expectation is {score}. "
+                    f"{score_meaning} "
+                    f"This is the main correct-score direction to explain."
+                )
+            else:
+                claim = (
+                    f"Another correct-score option is {score}. "
+                    f"{score_meaning}"
+                )
+
             facts.append(
                 fact(
                     f"F{i}",
-                    f"The forecast lists {score} as a correct-score option with {probability}% probability.",
+                    claim,
                     "Submitted forecast",
                     "forecast",
                     "forecast",

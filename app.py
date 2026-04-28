@@ -619,7 +619,7 @@ if run_button:
         }
     ]
 
-    max_repair_rounds = 5
+    max_repair_rounds = 2
     repair_round = 0
 
     while not validation_passed(final_validation) and repair_round < max_repair_rounds:

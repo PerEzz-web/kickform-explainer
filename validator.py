@@ -48,22 +48,23 @@ Forecast validation:
 - But the best article will usually avoid forecast percentages.
 
 Robotic wording check:
-Fail or request edits if the article uses robotic forecast-table phrasing, such as:
-- "probability"
-- "priced at"
-- "forecast gives"
-- "the market says"
-- "Both Teams To Score No at"
-- "Over 1.5 Goals at"
-- "Under 3.5 Goals at"
-- "correct score is ... at 15.0%"
-- "BTTS"
-- "model"
-- "algorithm"
-- "API"
-- "evidence"
-- "source"
-- "data pipeline"
+Forbidden wording in article body only:
+- Kickform
+- AI
+- model
+- algorithm
+- formula
+- API
+- evidence
+- source
+- validation
+- data pipeline
+- priced at
+- forecast gives
+- the market says
+
+Important:
+Do not apply forbidden-word checks to required section headings.
 
 Allowed natural wording:
 - "Atalanta look the more likely winner"
@@ -90,6 +91,15 @@ Factual validation:
 - Any manager quote must appear in approved evidence facts.
 - Any squad/team-news claim must appear in approved evidence facts.
 - Any fixture-congestion claim must appear in approved evidence facts.
+
+Correct score validation:
+- Correct score format is always HOME goals - AWAY goals.
+- The first number belongs to the home team.
+- The second number belongs to the away team.
+- If the article says 2-1 is an away-team win, FAIL.
+- If the article says 1-2 is a home-team win, FAIL.
+- If the article assigns a scoreline to the wrong team, FAIL and provide the corrected sentence.
+- Alternative scorelines must also be interpreted correctly.
 
 News-source wording:
 The article should not mention URLs or source names.
@@ -132,17 +142,32 @@ Example freshness validation:
 - Head-to-head examples between the two playing teams may be older.
 
 Section rules:
-- Each section should be 3 to 5 sentences long.
+- 3 to 5 sentences is preferred.
+- 6 sentences is acceptable when the extra sentence adds approved news context.
+- Do not fail a section only because it has 6 sentences and the extra sentence is useful, approved news context.
 - The article should avoid forecast percentages.
 - Context stats are allowed if supported by approved facts.
 
 Important section-count rule:
 - Section headings are not sentences.
 - Do not count headings such as "Value bet", "Match Outcome Probability", "Correct Score Probability", "Both Teams to Score", or "Match Goals Probability" as article sentences.
-- When checking whether a section has 3 to 5 sentences, count only the body text below the heading.
+- When checking whether a section has 3 to 6 sentences, count only the body text below the heading.
 
 - Any specific match-result example in the article must appear in approved facts.
 - Specific examples such as "lost 3-1 to Alverca" or "drew 1-1 with Casa Pia" are allowed only if approved evidence contains that result.
+
+News validation:
+- Approved news facts are allowed when they are in the approved evidence facts.
+- Do not fail a sentence for using news if the claim is supported by an approved news fact.
+- News may be blended with API stats and football reasoning.
+- Do not require the article to mention source names.
+- In fact, source names and URLs should not appear in the final article.
+- If a news claim is supported but phrased too strongly, request a softer rewrite rather than removing it.
+
+Examples of acceptable news usage:
+- "Vitinha being available helps PSG keep their midfield structure, although the recent foot issue adds a small fitness caveat."
+- "Bayern's confirmed absences reduce some squad depth, even if their attacking form remains strong."
+- "The comeback against Real Madrid adds to Bayern's confidence."
 
 Output format:
 Return exactly this format:
@@ -174,6 +199,30 @@ Critical consistency rules:
 - If there are no real unsupported claims, forbidden words, direction mismatches, or structure issues, status must be PASS.
 - Never output FAIL while saying "No issue".
 - Never output FAIL while saying the article can pass as written.
+
+False issue prevention:
+- Never list a sentence in Issues if the Problem says "No issue", "acceptable", "supported", "consistent", "fine", or "can pass as written".
+- If a sentence is directionally correct and supported by approved facts, do not list it as an issue.
+- Do not output Fix action: remove_sentence for a sentence that is supported.
+- Do not output Corrected sentence: None for a sentence that has no real issue.
+- If all potential issues are actually acceptable, the final status must be PASS.
+
+Very important:
+If you write "No issue" anywhere in the Issues section, you are making a mistake.
+Supported sentences must be omitted from Issues entirely.
+
+Required headings are allowed:
+- Match Outcome Probability
+- Correct Score Probability
+- Both Teams to Score
+- Match Goals Probability
+- Value bet
+
+Do not treat words inside required headings as forbidden wording.
+For example:
+- "Probability" is allowed inside "Match Outcome Probability" and "Correct Score Probability".
+- "Both Teams to Score" is allowed as a required heading.
+Only scan the body text below headings for forbidden wording.
 
 Critical consistency rule:
 If every listed issue says "No issue", "acceptable", "consistent", or "can pass as written", the final status must be PASS.

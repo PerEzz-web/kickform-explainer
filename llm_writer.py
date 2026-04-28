@@ -94,7 +94,9 @@ Use of concrete examples:
 Style:
 - Human, natural, football-native.
 - Short paragraphs.
-- 3 to 5 sentences per section.
+- Each section should usually be 3 to 5 sentences.
+- If approved news facts add useful context, a section may be 6 sentences.
+- Do not make the article bloated.
 - No "I" and no "we".
 - No citations, links, evidence IDs, source names, or technical language.
 - Avoid dry stat listing.
@@ -130,9 +132,23 @@ Match Outcome Probability:
 - Explain why the less likely outcome is still possible.
 
 Correct Score Probability:
-- Explain the most likely scoreline naturally.
-- You may mention the scoreline, but do not mention its probability.
-- Explain why that scoreline fits the teams' form, scoring/conceding, and head-to-head.
+- Correct score format is always HOME goals - AWAY goals.
+- The first number belongs to the home team.
+- The second number belongs to the away team.
+- Example: if the match is Paris Saint Germain vs Bayern Munich, then 1-2 means PSG 1, Bayern 2, so Bayern win.
+- Example: 2-1 means PSG 2, Bayern 1, so PSG win.
+- Never describe 2-1 as an away-team win.
+- Never describe 1-2 as a home-team win.
+- Explain ONLY the top correct score.
+- You may mention the top scoreline, but do not mention its probability.
+- Do not mention alternative correct scores.
+- Do not list nearby scorelines.
+- In the Correct Score Probability section, do not discuss alternative correct-score options. Explain only the top correct score.
+- Do not say "2-1 is also possible" or "2-2 is also in the picture".
+- Focus on why the top scoreline fits the match flow.
+- Explain whether the top scoreline means a home win, away win, or draw.
+- Use team form, scoring/conceding trends, home/away context, and head-to-head where useful.
+- Keep the section natural and human, not like a table explanation.
 
 Both Teams to Score:
 - Explain whether both teams are expected to score or whether one side is more likely to be kept out.
@@ -147,14 +163,27 @@ Match Goals Probability:
 - Mention why the less likely scenario is still possible, without giving its percentage.
 
 News context:
-- You may use approved news facts when they add real football value.
-- Use news facts sparingly.
-- Do not mention source names or URLs in the article.
-- Do not say "according to".
-- Do not overstate news facts.
-- If a news fact has medium or low confidence, phrase it cautiously.
-- News should support the reasoning, not take over the article.
-- Never invent team news, injuries, suspensions, or manager pressure beyond approved facts.
+- If approved news facts are available, use 2 to 3 relevant news insights across the article.
+- Use only recent approved news facts.
+- Blend news with API stats and match reasoning.
+- Do not create a separate news paragraph.
+- Do not mention source names, URLs, or "according to".
+- Do not overstate news.
+- News should support the forecast explanation, not replace the football logic.
+- It is okay if sections become slightly longer because of useful news context.
+- Prefer news in Match Outcome Probability, Both Teams to Score, and Match Goals Probability.
+- Use news in Correct Score Probability only if it directly supports the scoreline logic.
+
+Good news integration examples:
+- "Vitinha being available helps PSG keep their midfield structure, although coming off a foot issue still adds a small fitness caveat."
+- "Bayern still carry attacking momentum, but the absences of Serge Gnabry and other squad players reduce some of their depth."
+- "The comeback against Real Madrid adds to Bayern's confidence, and that fits their recent scoring numbers."
+
+Do not write:
+- "The source says..."
+- "News reports say..."
+- "According to..."
+- "The article claims..."
 
 If news facts are available, prefer concrete team-news facts over vague narratives.
 For example, use injury/suspension/rotation news only when approved.

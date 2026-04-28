@@ -67,6 +67,19 @@ Repair rules:
 - Mention other tournaments when they appear in recent all-competitions form.
 - Do not use league position alone as the reason for an outcome.
 
+News preservation:
+- Do not remove approved news insights just to make the text shorter.
+- If a news claim is supported by approved facts and relevant to the match, keep it where possible.
+- If the validation issue is only wording, rewrite the sentence but preserve the news insight.
+- Use 2 to 3 approved recent news insights across the final article when available.
+- Remove news only if it is unsupported, outdated, irrelevant, or too speculative.
+
+Correct score repair:
+- Correct score format is always HOME goals - AWAY goals.
+- If the draft assigns a scoreline to the wrong team, correct it.
+- For example, in PSG vs Bayern Munich, 1-2 is a Bayern win, 2-1 is a PSG win, and 2-2 is a draw.
+- Do not leave incorrect scoreline ownership in the final text.
+
 Output structure:
 Use exactly these headings, in this order:
 

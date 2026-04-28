@@ -1,6 +1,7 @@
 import json
 import re
 from typing import Any, Dict, List
+import datetime as dt
 
 from openai import OpenAI
 
@@ -44,6 +45,26 @@ TRUSTED_NEWS_DOMAINS = [
     "gazzetta.it",
 ]
 
+def parse_news_date(date_text: str):
+    if not date_text or date_text == "unknown":
+        return None
+
+    try:
+        return dt.date.fromisoformat(date_text[:10])
+    except Exception:
+        return None
+
+
+def is_news_recent_enough(published_date: str, match_date_iso: str, max_age_days: int = 3) -> bool:
+    news_date = parse_news_date(published_date)
+    match_date = parse_news_date(match_date_iso)
+
+    if not news_date or not match_date:
+        return False
+
+    age_days = (match_date - news_date).days
+
+    return 0 <= age_days <= max_age_days
 
 def usage_to_dict(response):
     usage = getattr(response, "usage", None)
@@ -128,6 +149,31 @@ The match date is provided. News should be from before the match date.
 For injuries/team news, prefer articles from the last 14 days before the match.
 For broader pressure/morale stories, prefer the last 30 days before the match.
 
+Freshness rule:
+Only return news published within 3 days before the match date.
+If the news is older than 3 days, do not include it.
+
+Relevance rule:
+Every fact must be clearly related to:
+- this exact match,
+- one of the two teams,
+- or a player/manager from one of the two teams.
+
+Insight quality:
+Prefer facts that can influence match reasoning:
+- important player availability
+- return from injury
+- recent injury concern but expected availability
+- confirmed absences
+- rotation risk
+- manager comments about squad condition
+- morale after a recent major match
+- fixture congestion
+
+Do not return generic schedule listings unless they add a real football insight.
+Do not return old injury doubts if a newer update says the player is available.
+If a newer update supersedes an older update, keep only the newer update.
+
 Return strict JSON only, with this shape:
 {
   "facts": [
@@ -199,8 +245,18 @@ Return only verified facts as JSON.
     for item in facts:
         claim = item.get("claim")
         source_url = item.get("source_url")
+        published_date = item.get("published_date")
+        confidence = item.get("confidence", "medium")
 
         if not claim or not source_url:
+            continue
+
+        # Keep only recent news: max 3 days before match.
+        if not is_news_recent_enough(published_date, match_date_iso, max_age_days=3):
+            continue
+
+        # Avoid weak facts.
+        if confidence not in ["high", "medium"]:
             continue
 
         approved_facts.append(item)
