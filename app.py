@@ -29,6 +29,15 @@ st.write(
     "collect structured football facts from API-Football, and generate a human-style explanation."
 )
 
+def get_secret(name: str, default=None):
+    """
+    Reads secrets locally from .streamlit/secrets.toml
+    and online from environment variables, e.g. Render.
+    """
+    try:
+        return st.secrets[name]
+    except Exception:
+        return os.environ.get(name, default)
 
 def convert_date_text_to_iso(date_text: str):
     if not date_text:
