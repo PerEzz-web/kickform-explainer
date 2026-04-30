@@ -17,6 +17,7 @@ def repair_explanation(
     match_info: Dict[str, Any],
     forecast: Dict[str, Any],
     evidence_facts: List[Dict[str, Any]],
+    output_language: str = "en",
 ) -> Dict[str, Any]:
     client = OpenAI(api_key=openai_api_key)
 
@@ -53,6 +54,12 @@ Use natural wording:
 - "a shootout feels less likely"
 - "the underdog still has a route if they keep it tight"
 
+Language rule:
+- Preserve the requested output language.
+- If output_language is "de", the repaired article must be in German.
+- If output_language is "en", the repaired article must be in English.
+- Do not translate team names, player names, stadium names, or competition names.
+
 Repair rules:
 - Fix every issue in the validation report.
 - Do not add new facts.
@@ -81,16 +88,24 @@ Correct score repair:
 - Do not leave incorrect scoreline ownership in the final text.
 
 Output structure:
-Use exactly these headings, in this order:
+Use the heading set that matches output_language.
 
+If output_language is "de":
+Value-Tipp
+Spielausgang
+Korrektes Ergebnis
+Beide Teams treffen
+Tore im Spiel
+
+If output_language is "en":
 Value bet
 Match Outcome Probability
 Correct Score Probability
 Both Teams to Score
 Match Goals Probability
 
-Only include "Value bet" if a value bet exists in the forecast.
-If there is no value bet, do not include that section.
+Only include the Value-Tipp / Value bet section if a value tip exists in the forecast.
+If there is no value tip, do not include that section.
 
 Each section:
 - 3 to 5 sentences
@@ -110,6 +125,7 @@ Only the corrected fan-facing article text.
         "match_info": match_info,
         "forecast_expectations_source_of_truth": forecast,
         "approved_context_facts": evidence_facts,
+        "output_language": output_language,
     }
 
     response = client.responses.create(

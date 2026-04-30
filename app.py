@@ -56,6 +56,28 @@ def convert_date_text_to_iso(date_text: str):
     except Exception:
         return None
 
+def infer_competition_from_url(url: str):
+    if not url:
+        return None
+
+    url_lower = url.lower()
+
+    mapping = {
+        "/champions-league/": "Champions League",
+        "/europa-league/": "Europa League",
+        "/premier-league/": "Premier League",
+        "/bundesliga/": "Bundesliga",
+        "/la-liga/": "La Liga",
+        "/serie-a/": "Serie A",
+        "/ligue-1/": "Ligue 1",
+        "/portuguese-primeira-liga/": "Portuguese Primeira Liga",
+    }
+
+    for slug, competition in mapping.items():
+        if slug in url_lower:
+            return competition
+
+    return None
 
 def get_api_football_league_id(competition_name: str):
     if not competition_name:
@@ -80,6 +102,40 @@ def get_api_football_league_id(competition_name: str):
 
     return mapping.get(name)
 
+def forecast_has_required_data(forecast: dict) -> bool:
+    if not forecast:
+        return False
+
+    match_outcome = forecast.get("match_outcome") or {}
+    correct_score = forecast.get("correct_score") or []
+    btts = forecast.get("both_teams_to_score") or {}
+    goals = forecast.get("match_goals") or {}
+
+    has_outcome = all(
+        match_outcome.get(key) is not None
+        for key in ["home_win", "draw", "away_win"]
+    )
+
+    has_correct_score = len(correct_score) > 0
+
+    has_btts = (
+        btts.get("yes") is not None
+        and btts.get("no") is not None
+    )
+
+    has_goals = any(
+        goals.get(key) is not None
+        for key in [
+            "over_1_5",
+            "under_1_5",
+            "over_2_5",
+            "under_2_5",
+            "over_3_5",
+            "under_3_5",
+        ]
+    )
+
+    return has_outcome and has_correct_score and has_btts and has_goals
 
 def get_api_football_season(match_date_iso: str):
     if not match_date_iso:
@@ -105,6 +161,31 @@ def validation_passed(validation_text: str) -> bool:
         return False
 
     return True
+
+def get_output_language_from_url(url: str) -> str:
+    """
+    SWV pages should generate German text.
+    TPP pages should generate English text.
+    """
+    if not url:
+        return "en"
+
+    url_lower = url.lower()
+
+    if "sportwettenvergleich.net" in url_lower:
+        return "de"
+
+    if "thepunterspage.com" in url_lower:
+        return "en"
+
+    return "en"
+
+
+def get_output_language_label(language_code: str) -> str:
+    if language_code == "de":
+        return "German"
+
+    return "English"
 
 def safe_get_range_fixtures(api, team_id, from_date, to_date, api_season=None, api_league_id=None):
     """
@@ -167,7 +248,30 @@ url = st.text_input(
     value="https://www.sportwettenvergleich.net/kickform/premier-league/manchester-united-vs-brentford-fc/koenj/",
 )
 
+output_language = get_output_language_from_url(url)
+
+st.info(
+    f"Final explanation language: {get_output_language_label(output_language)} "
+    f"({'SWV domain detected' if output_language == 'de' else 'TPP/default domain detected'})"
+)
+
 run_button = st.button("Generate explanation")
+
+final_result_placeholder = st.empty()
+
+with final_result_placeholder.container():
+    st.subheader("✅ Final result will appear here")
+    st.info(
+        "Paste a Kickform URL and click Generate explanation. "
+        "The final publishable text will appear in this section."
+    )
+
+status_placeholder = st.empty()
+
+debug_expander = st.expander(
+    "🔍 Under-the-hood details: forecast data, API calls, evidence, validation and cost",
+    expanded=False,
+)
 
 use_news_research = st.checkbox(
     "Use trusted web news research",
@@ -213,14 +317,45 @@ if run_button:
     news_usage_items = []
     openai_web_search_calls = 0
 
+    status_box = status_placeholder.status(
+        "Starting generation...",
+        expanded=True,
+    )
+
+    status_box.update(label="Step 1/10: Extracting Kickform forecast page...", state="running")
+
     with st.spinner("Extracting forecast page..."):
         kickform_data = extract_kickform_page(url)
 
     match_info = kickform_data["match_info"]
     forecast = kickform_data["forecast"]
 
-    st.subheader("1. Extracted forecast data")
-    st.json(kickform_data)
+    if not match_info.get("competition"):
+        inferred_competition = infer_competition_from_url(url)
+
+        if inferred_competition:
+            match_info["competition"] = inferred_competition
+
+    if not forecast_has_required_data(forecast):
+        status_box.update(label="Forecast parsing failed.", state="error")
+
+        with final_result_placeholder.container():
+            st.subheader("✅ Final result will appear here")
+            st.error(
+                "The app could not extract the required Kickform forecast data from this page. "
+                "No article was generated because that could create misleading text."
+            )
+            st.write("Please open the under-the-hood details and check the debug files.")
+
+        with debug_expander:
+            st.subheader("1. Extracted forecast data")
+            st.json(kickform_data)
+
+        st.stop()
+
+    with debug_expander:
+        st.subheader("1. Extracted forecast data")
+        st.json(kickform_data)
 
     if kickform_data.get("debug", {}).get("value_tip_source"):
         st.error(
@@ -231,18 +366,29 @@ if run_button:
     home_team = match_info.get("home_team")
     away_team = match_info.get("away_team")
 
-    st.write("Detected home team:", home_team)
-    st.write("Detected away team:", away_team)
+    with debug_expander:
+        st.write("Detected home team:", home_team)
+        st.write("Detected away team:", away_team)
 
     match_date_iso = match_info.get("match_date_iso") or convert_date_text_to_iso(
         match_info.get("match_date_text")
     )
 
     if not home_team or not away_team:
-        st.error(
-            "Could not detect teams from the page. "
-            "Open data/debug_kickform_rendered_text.txt and we will adjust the parser."
-        )
+        status_box.update(label="Page parsing failed: teams could not be detected.", state="error")
+
+        with final_result_placeholder.container():
+            st.subheader("✅ Final result will appear here")
+            st.error(
+                "The app could not detect the teams from this page, so no article was generated."
+            )
+
+        with debug_expander:
+            st.error(
+                "Could not detect teams from the page. "
+                "Open data/debug_kickform_rendered_text.txt and adjust the parser."
+            )
+
         st.stop()
 
     if len(home_team) > 60 or len(away_team) > 60:
@@ -260,6 +406,11 @@ if run_button:
 
     api = ApiFootballClient(api_football_key)
 
+    api_league_id = get_api_football_league_id(match_info.get("competition"))
+    api_season = get_api_football_season(match_date_iso)
+
+    status_box.update(label="Step 2/10: Connecting to API-Football and resolving teams...", state="running")
+
     with st.spinner("Resolving teams in API-Football..."):
         home_results = api.search_team(home_team)
         away_results = api.search_team(away_team)
@@ -276,16 +427,15 @@ if run_button:
     home_team_id = home_api_team["team"]["id"]
     away_team_id = away_api_team["team"]["id"]
 
-    api_league_id = get_api_football_league_id(match_info.get("competition"))
-    api_season = get_api_football_season(match_date_iso)
 
-    st.subheader("2. API-Football team resolution")
-    st.write("Home:", home_api_team["team"]["name"], home_team_id)
-    st.write("Away:", away_api_team["team"]["name"], away_team_id)
-    st.write("API-Football league ID:", api_league_id)
-    st.write("API-Football season:", api_season)
 
-    with st.expander("Team resolution debug"):
+    with debug_expander:
+        st.subheader("2. API-Football team resolution")
+        st.write("Home:", home_api_team["team"]["name"], home_team_id)
+        st.write("Away:", away_api_team["team"]["name"], away_team_id)
+        st.write("API-Football league ID:", api_league_id)
+        st.write("API-Football season:", api_season)
+
         st.write("Home API search results")
         st.json(home_results)
 
@@ -296,6 +446,8 @@ if run_button:
     injuries = []
 
     if match_date_iso:
+        status_box.update(label="Step 3/10: Finding exact fixture in API-Football...", state="running")
+
         with st.spinner("Finding fixture in API-Football..."):
             candidate_fixtures = api.get_fixtures_for_team_date(
                 team_id=home_team_id,
@@ -328,8 +480,9 @@ if run_button:
                 )
 
         if fixture:
-            st.subheader("3. Matched fixture")
-            st.json(fixture)
+            with debug_expander:
+                st.subheader("3. Matched fixture")
+                st.json(fixture)
 
             fixture_id = fixture["fixture"]["id"]
 
@@ -339,6 +492,11 @@ if run_button:
             except Exception as e:
                 st.warning(f"Could not fetch injuries: {e}")
         else:
+            status_box.update(
+                label="Exact fixture not found in API-Football. Continuing with team context only...",
+                state="running",
+            )
+
             st.warning(
                 "Could not find exact fixture in API-Football. "
                 "The app will continue with team context only."
@@ -352,6 +510,8 @@ if run_button:
         today = dt.date.today()
         from_date = (today - dt.timedelta(days=120)).isoformat()
         to_date = today.isoformat()
+
+    status_box.update(label="Step 4/10: Fetching recent team form...", state="running")
 
     with st.spinner("Fetching recent form from API-Football..."):
         # Overall recent form across all competitions.
@@ -443,37 +603,40 @@ if run_button:
             limit=5,
         )
 
-    st.subheader("4. Deterministic form summaries")
+    with debug_expander:
+        st.subheader("4. Deterministic form summaries")
 
-    col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col1:
-        st.write(home_team)
-        st.write("Overall form across competitions")
-        st.json(home_form)
+        with col1:
+            st.write(home_team)
+            st.write("Overall form across competitions")
+            st.json(home_form)
 
-        st.write("Home-only form across competitions")
-        st.json(home_home_form)
+            st.write("Home-only form across competitions")
+            st.json(home_home_form)
 
-        st.write(f"{match_info.get('competition')} form")
-        st.json(home_competition_form)
+            st.write(f"{match_info.get('competition')} form")
+            st.json(home_competition_form)
 
-    with col2:
-        st.write(away_team)
-        st.write("Overall form across competitions")
-        st.json(away_form)
+        with col2:
+            st.write(away_team)
+            st.write("Overall form across competitions")
+            st.json(away_form)
 
-        st.write("Away-only form across competitions")
-        st.json(away_away_form)
+            st.write("Away-only form across competitions")
+            st.json(away_away_form)
 
-        st.write(f"{match_info.get('competition')} form")
-        st.json(away_competition_form)
+            st.write(f"{match_info.get('competition')} form")
+            st.json(away_competition_form)
 
     home_standing = None
     away_standing = None
 
     if api_league_id and api_season:
         try:
+            status_box.update(label="Step 5/10: Fetching league standings...", state="running")
+
             with st.spinner("Fetching league standings..."):
                 standings_response = api.get_standings(
                     league_id=api_league_id,
@@ -483,21 +646,24 @@ if run_button:
                 home_standing = find_team_standing(standings_response, home_team_id)
                 away_standing = find_team_standing(standings_response, away_team_id)
 
-            st.subheader("5. League standings")
-            scol1, scol2 = st.columns(2)
+            with debug_expander:
+                st.subheader("5. League standings")
+                scol1, scol2 = st.columns(2)
 
-            with scol1:
-                st.write(home_team)
-                st.json(home_standing)
+                with scol1:
+                    st.write(home_team)
+                    st.json(home_standing)
 
-            with scol2:
-                st.write(away_team)
-                st.json(away_standing)
+                with scol2:
+                    st.write(away_team)
+                    st.json(away_standing)
 
         except Exception as e:
             st.warning(f"Could not fetch standings: {e}")
 
     h2h_summary = None
+
+    status_box.update(label="Step 6/10: Fetching head-to-head matches...", state="running")
 
     try:
         with st.spinner("Fetching head-to-head matches..."):
@@ -516,19 +682,23 @@ if run_button:
                 limit=5,
             )
 
-        st.subheader("6. Head-to-head summary")
-        st.json(h2h_summary)
+        with debug_expander:
+            st.subheader("6. Head-to-head summary")
+            st.json(h2h_summary)
 
     except Exception as e:
         st.warning(f"Could not fetch head-to-head data: {e}")
 
-    with st.expander("API-Football debug calls"):
+    with debug_expander:
+        st.subheader("API-Football debug calls")
         st.json(api.debug_calls)
 
     news_facts = []
     news_result = None
 
     if use_news_research:
+        status_box.update(label="Step 7/10: Searching trusted recent news...", state="running")
+
         with st.spinner("Researching trusted news sources..."):
             news_result = research_match_news(
                 openai_api_key=openai_api_key,
@@ -543,14 +713,24 @@ if run_button:
         news_usage_items.append(news_result.get("usage"))
         openai_web_search_calls += news_result.get("web_search_calls", 0)
 
+    else:
+        status_box.update(label="Step 7/10: News research skipped.", state="running")
+
+    with debug_expander:
         st.subheader("7a. Approved news facts")
         st.json(news_facts)
 
-        with st.expander("News research raw output"):
+        st.subheader("News research raw output")
+
+        if news_result:
             st.write("Notes:", news_result.get("notes"))
             st.write("Web search calls:", news_result.get("web_search_calls"))
             st.write("Raw response:")
             st.text(news_result.get("raw_text", ""))
+        else:
+            st.info("News research was skipped.")
+
+    status_box.update(label="Step 8/10: Building approved evidence facts...", state="running")
 
     with st.spinner("Building approved evidence facts..."):
         evidence = build_evidence(
@@ -569,14 +749,18 @@ if run_button:
             news_facts=news_facts,
         )
 
-    st.subheader("7. Approved evidence facts")
-    st.json(evidence)
+    with debug_expander:
+        st.subheader("7. Approved evidence facts")
+        st.json(evidence)
 
     example_facts = [item for item in evidence if item.get("category") == "examples"]
 
     if example_facts:
-        st.subheader("7b. Selected example facts")
-        st.json(example_facts)
+        with debug_expander:
+            st.subheader("7b. Selected example facts")
+            st.json(example_facts)
+
+    status_box.update(label="Step 9/10: Generating final explanation with OpenAI...", state="running")
 
     with st.spinner("Generating draft explanation with OpenAI..."):
         writer_result = generate_explanation(
@@ -585,13 +769,17 @@ if run_button:
             match_info=match_info,
             forecast=forecast,
             evidence_facts=evidence,
+            output_language=output_language,
         )
 
     draft_explanation = writer_result["text"]
     writer_usage_items.append(writer_result.get("usage"))
 
-    st.subheader("8. Draft explanation")
-    st.markdown(draft_explanation)
+    with debug_expander:
+        st.subheader("8. Draft explanation")
+        st.markdown(draft_explanation)
+
+    status_box.update(label="Step 10/10: Validating final explanation...", state="running")
 
     with st.spinner("Validating draft explanation..."):
         draft_validation_result = validate_explanation(
@@ -600,13 +788,15 @@ if run_button:
             explanation=draft_explanation,
             evidence_facts=evidence,
             forecast=forecast,
+            output_language=output_language,
         )
 
     draft_validation = draft_validation_result["text"]
     validator_usage_items.append(draft_validation_result.get("usage"))
 
-    st.subheader("9. Draft validation report")
-    st.markdown(draft_validation)
+    with debug_expander:
+        st.subheader("9. Draft validation report")
+        st.markdown(draft_validation)
 
     final_explanation = draft_explanation
     final_validation = draft_validation
@@ -625,6 +815,11 @@ if run_button:
     while not validation_passed(final_validation) and repair_round < max_repair_rounds:
         repair_round += 1
 
+        status_box.update(
+            label=f"Repairing explanation, round {repair_round}...",
+            state="running",
+        )
+
         with st.spinner(f"Repairing unsupported claims, round {repair_round}..."):
             repair_result = repair_explanation(
                 openai_api_key=openai_api_key,
@@ -634,9 +829,15 @@ if run_button:
                 match_info=match_info,
                 forecast=forecast,
                 evidence_facts=evidence,
+                output_language=output_language,
             )
         final_explanation = repair_result["text"]
         repair_usage_items.append(repair_result.get("usage"))
+
+        status_box.update(
+            label=f"Validating repaired explanation, round {repair_round}...",
+            state="running",
+        )
 
         with st.spinner(f"Validating repaired explanation, round {repair_round}..."):
             final_validation_result = validate_explanation(
@@ -645,7 +846,8 @@ if run_button:
                 explanation=final_explanation,
                 evidence_facts=evidence,
                 forecast=forecast,
-            )
+                output_language=output_language,
+            )  
 
         final_validation = final_validation_result["text"]
         validator_usage_items.append(final_validation_result.get("usage"))
@@ -660,22 +862,43 @@ if run_button:
 
     approved = validation_passed(final_validation)
 
-    st.subheader("10. Final explanation")
-
     if approved:
-        st.success("Approved by validation.")
+        status_box.update(label="Generation completed and approved.", state="complete")
     else:
-        st.warning(
-            "Validation did not pass automatically. Review the validation details below. "
-            "This is usually caused by the validator being too strict or by a sentence needing another prompt adjustment."
+        status_box.update(label="Generation completed, but validation needs review.", state="error")
+
+    with final_result_placeholder.container():
+        st.subheader("✅ Final result for review")
+
+        if output_language == "de":
+            st.caption("Finale deutsche Version für Sportwettenvergleich.net")
+        else:
+            st.caption("Final English version for ThePuntersPage.com")
+
+        if approved:
+            st.success("Approved by validation.")
+        else:
+            st.warning("Validation did not pass automatically. Please review before publishing.")
+
+        st.markdown(final_explanation)
+
+        st.download_button(
+            label="Download final text",
+            data=final_explanation,
+            file_name="kickform_final_explanation.txt",
+            mime="text/plain",
         )
 
-    st.markdown(final_explanation)
+    with debug_expander:
+        st.subheader("10. Final explanation")
+        st.markdown(final_explanation)
 
-    st.subheader("11. Final validation report")
-    st.markdown(final_validation)
 
-    with st.expander("Repair history"):
+    with debug_expander:
+        st.subheader("11. Final validation report")
+        st.markdown(final_validation)
+
+        st.subheader("Repair history")
         st.json(repair_history)
 
     writer_cost_report = estimate_openai_cost(
@@ -743,9 +966,10 @@ if run_button:
         6,
     )
 
-    st.subheader("12. Cost report")
+    with debug_expander:
+        st.subheader("12. Cost report")
 
-    st.json(
+        st.json(
         {
             "generation_cost_summary": {
                 "total_generation_cost_usd": total_generation_cost,

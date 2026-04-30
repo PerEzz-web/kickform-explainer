@@ -15,6 +15,7 @@ def generate_explanation(
     match_info: Dict[str, Any],
     forecast: Dict[str, Any],
     evidence_facts: List[Dict[str, Any]],
+    output_language: str = "en",
 ) -> Dict[str, Any]:
     client = OpenAI(api_key=openai_api_key)
 
@@ -47,6 +48,30 @@ Instead, translate the forecast into natural human football language:
 
 Do not mention percentages from the forecast unless the section is Value bet and a confidence rating is needed.
 In normal sections, avoid percentages completely.
+
+Output language:
+- If output_language is "de", write the final article in natural German.
+- If output_language is "en", write the final article in natural English.
+- Do not mix languages.
+- Keep team names, player names, stadium names and competition names unchanged.
+- For sportwettenvergleich.net pages, German is required by default.
+- For thepunterspage.com pages, English is required by default.
+
+German heading rules:
+If output_language is "de", use these exact headings:
+- Value-Tipp, only if a value tip exists
+- Spielausgang
+- Korrektes Ergebnis
+- Beide Teams treffen
+- Tore im Spiel
+
+English heading rules:
+If output_language is "en", use these exact headings:
+- Value bet, only if a value tip exists
+- Match Outcome Probability
+- Correct Score Probability
+- Both Teams to Score
+- Match Goals Probability
 
 Important distinction:
 The internal forecast is not a public fact.
@@ -109,13 +134,24 @@ Do not say only "recent form is poor" if approved example facts are available.
 Where useful, add one short example such as "that run includes a 3-1 away defeat to Alverca."
 
 Output structure:
-Use exactly these section headings, in this order:
+Use the heading set that matches output_language.
 
+If output_language is "de":
+Value-Tipp
+Spielausgang
+Korrektes Ergebnis
+Beide Teams treffen
+Tore im Spiel
+
+If output_language is "en":
 Value bet
 Match Outcome Probability
 Correct Score Probability
 Both Teams to Score
 Match Goals Probability
+
+Only include the Value-Tipp / Value bet section if a value tip exists in the forecast.
+If there is no value tip, do not include that section.
 
 Value bet:
 - Include this section only if forecast.value_tip is present and not null.
@@ -197,6 +233,7 @@ Only the fan-facing article text.
         "match_info": match_info,
         "forecast_expectations_source_of_truth": forecast,
         "approved_context_facts": evidence_facts,
+        "output_language": output_language,
         "writing_goal": "Write a human football explanation that justifies the expected outcomes without exposing forecast-table language.",
     }
 

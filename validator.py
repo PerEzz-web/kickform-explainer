@@ -15,6 +15,7 @@ def validate_explanation(
     explanation: str,
     evidence_facts: List[Dict[str, Any]],
     forecast: Optional[Dict[str, Any]] = None,
+    output_language: str = "en",
 ) -> Dict[str, Any]:
     client = OpenAI(api_key=openai_api_key)
 
@@ -46,6 +47,12 @@ Forecast validation:
 - If the article says the wrong most likely scoreline, FAIL.
 - If forecast numbers are mentioned, they must match exactly.
 - But the best article will usually avoid forecast percentages.
+
+Language validation:
+- If output_language is "de", the article body must be in German.
+- If output_language is "en", the article body must be in English.
+- Team names, player names, stadium names and competition names may stay in their original form.
+- Do not fail German output for using football terms that are natural in German.
 
 Robotic wording check:
 Forbidden wording in article body only:
@@ -211,12 +218,27 @@ Very important:
 If you write "No issue" anywhere in the Issues section, you are making a mistake.
 Supported sentences must be omitted from Issues entirely.
 
-Required headings are allowed:
+Required headings:
+
+If output_language is "de":
+- Spielausgang
+- Korrektes Ergebnis
+- Beide Teams treffen
+- Tore im Spiel
+
+Optional German heading:
+- Value-Tipp, only when value tip exists
+
+If output_language is "en":
 - Match Outcome Probability
 - Correct Score Probability
 - Both Teams to Score
 - Match Goals Probability
-- Value bet
+
+Optional English heading:
+- Value bet, only when value tip exists
+
+Do not apply forbidden-word checks to section headings.
 
 Do not treat words inside required headings as forbidden wording.
 For example:
@@ -250,6 +272,7 @@ Recommended edits:
         "approved_context_facts": evidence_facts,
         "forecast_expectations_source_of_truth": forecast or {},
         "has_value_bet": has_value_bet,
+        "output_language": output_language,
     }
 
     response = client.responses.create(
