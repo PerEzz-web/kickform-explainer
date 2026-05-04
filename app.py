@@ -345,11 +345,30 @@ if run_button:
                 "The app could not extract the required Kickform forecast data from this page. "
                 "No article was generated because that could create misleading text."
             )
-            st.write("Please open the under-the-hood details and check the debug files.")
+            st.write(
+                "Open the under-the-hood section below and download the debug files. "
+                "Send those files for parser investigation."
+            )
 
         with debug_expander:
             st.subheader("1. Extracted forecast data")
             st.json(kickform_data)
+
+            st.subheader("Debug files")
+
+            debug_files = kickform_data.get("debug", {}).get("debug_files", [])
+
+            for debug_file in debug_files:
+                try:
+                    with open(debug_file, "rb") as file:
+                        st.download_button(
+                            label=f"Download {debug_file}",
+                            data=file,
+                            file_name=debug_file.replace("/", "_").replace("\\", "_"),
+                            mime="text/plain",
+                        )
+                except Exception as e:
+                    st.write(f"Could not load {debug_file}: {e}")
 
         st.stop()
 
