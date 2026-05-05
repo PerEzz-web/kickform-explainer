@@ -262,16 +262,23 @@ def build_evidence(
         i += 1
 
     if match_date:
-        facts.append(
-            fact(
-                f"F{i}",
-                f"The match date is {match_date}.",
-                "Match information extracted from submitted page",
-                "match_info",
-                "match_info",
-            )
-        )
-        i += 1
+        try:
+            parsed_match_date = dt.date.fromisoformat(str(match_date)[:10])
+            today = dt.datetime.now(dt.timezone.utc).date()
+
+            if parsed_match_date >= today:
+                facts.append(
+                    fact(
+                        f"F{i}",
+                        f"The match date is {match_date}.",
+                        "Match information extracted from submitted page or matched fixture",
+                        "match_info",
+                        "match_info",
+                    )
+                )
+                i += 1
+        except Exception:
+            pass
 
     # -------------------------
     # Forecast facts
@@ -774,7 +781,7 @@ def build_evidence(
     # -------------------------
 
     if news_facts:
-        for news_item in news_facts[:6]:
+        for news_item in news_facts[:10]:
             claim = news_item.get("claim")
             source_title = news_item.get("source_title")
             source_url = news_item.get("source_url")

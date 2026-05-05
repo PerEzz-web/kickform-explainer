@@ -199,21 +199,22 @@ Match Goals Probability:
 - Mention why the less likely scenario is still possible, without giving its percentage.
 
 News context:
-- Fresh approved news is important and should influence the explanation.
-- If 3 or more approved news facts are available, use 3 to 5 news insights across the article.
+News context:
+- Fresh approved news is a major part of the explanation, not a minor add-on.
+- If 6 or more approved news facts are available, use 5 to 7 distinct news insights across the article.
+- If 3 to 5 approved news facts are available, use at least 3.
 - If 1 or 2 approved news facts are available, use them if relevant.
+- Spread news across sections instead of using it all in the first section.
+- Use at least one fresh news insight in Match Outcome / Spielausgang when news is available.
+- Use at least one fresh news insight in Correct Score / Korrektes Ergebnis when it supports the scoreline.
+- Use at least one fresh news insight in Both Teams to Score / Beide Teams treffen when it relates to attacking/defensive availability.
+- Use at least one fresh news insight in Match Goals / Tore im Spiel when it relates to attacking form, injuries, player returns, tactical approach, or match pressure.
+- Do not repeat the same news fact in several sections.
 - Blend news with API stats and match reasoning.
 - Do not create a separate news section.
 - Do not mention source names, URLs, or "according to".
 - Do not overstate news.
-- News should support the forecast explanation, not replace football logic.
-- Use news especially for:
-  - Match Outcome / Spielausgang
-  - Both Teams to Score / Beide Teams treffen
-  - Match Goals / Tore im Spiel
-- Use news in Correct Score / Korrektes Ergebnis only when it directly supports the expected scoreline.
-- It is okay if sections become slightly longer because of useful fresh news context.
-- Do not remove useful fresh news just to keep the text short.
+- It is okay if a section has 6 sentences when the extra sentence adds useful fresh news context.
 
 Examples of good integration:
 - "Even with Vitinha expected to be available, the recent foot issue adds a small fitness caveat in midfield."

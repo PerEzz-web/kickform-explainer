@@ -79,6 +79,52 @@ def infer_competition_from_url(url: str):
 
     return None
 
+
+def find_future_fixture_between_teams(
+    api,
+    home_team_id,
+    away_team_id,
+    generation_date_iso,
+    api_season=None,
+    api_league_id=None,
+    days_ahead=60,
+):
+    """
+    Used when the page date is missing, invalid, or in the past.
+    Forecast matches must be future matches, so search forward only.
+    """
+    start_date = dt.date.fromisoformat(generation_date_iso)
+    end_date = start_date + dt.timedelta(days=days_ahead)
+
+    attempts = [
+        {"season": api_season, "league_id": api_league_id},
+        {"season": api_season, "league_id": None},
+        {"season": None, "league_id": None},
+    ]
+
+    for attempt in attempts:
+        try:
+            candidates = api.get_fixtures_for_team_range(
+                team_id=home_team_id,
+                from_date=start_date.isoformat(),
+                to_date=end_date.isoformat(),
+                season=attempt["season"],
+                league_id=attempt["league_id"],
+            )
+
+            fixture = find_fixture_between_teams(
+                candidates,
+                home_team_id,
+                away_team_id,
+            )
+
+            if fixture:
+                return fixture
+        except Exception:
+            pass
+
+    return None
+
 def get_api_football_league_id(competition_name: str):
     if not competition_name:
         return None
@@ -136,6 +182,64 @@ def forecast_has_required_data(forecast: dict) -> bool:
     )
 
     return has_outcome and has_correct_score and has_btts and has_goals
+
+def get_generation_date_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).date().isoformat()
+
+
+def is_future_or_today_date(date_iso: str) -> bool:
+    """
+    Kickform forecast pages should only represent upcoming matches.
+    Reject old dates such as 1970-01-01 or already-played matches.
+    """
+    if not date_iso:
+        return False
+
+    try:
+        parsed_date = dt.date.fromisoformat(str(date_iso)[:10])
+    except Exception:
+        return False
+
+    today = dt.datetime.now(dt.timezone.utc).date()
+
+    if parsed_date < today:
+        return False
+
+    if parsed_date > today + dt.timedelta(days=730):
+        return False
+
+    return True
+
+def render_news_context_summary(news_facts, max_items=8):
+    if not news_facts:
+        st.info("No approved fresh news facts were used for this generation.")
+        return
+
+    st.markdown("### Fresh news context used for generation")
+
+    for index, item in enumerate(news_facts[:max_items], start=1):
+        claim = item.get("claim", "")
+        source_title = item.get("source_title") or "Source"
+        source_url = item.get("source_url")
+        published_date = item.get("published_date", "unknown date")
+        why_it_matters = item.get("why_it_matters", "")
+
+        st.markdown(f"**{index}. {published_date} — {source_title}**")
+
+        if claim:
+            st.write(f"Key phrase: {claim}")
+
+        if why_it_matters:
+            st.caption(f"Why it matters: {why_it_matters}")
+
+        if source_url:
+            st.markdown(f"[Open source]({source_url})")
+
+def show_json_or_message(obj, empty_message: str):
+    if obj is None:
+        st.info(empty_message)
+    else:
+        st.json(obj)
 
 def get_api_football_season(match_date_iso: str):
     if not match_date_iso:
@@ -319,7 +423,7 @@ if run_button:
     repair_usage_items = []
     news_usage_items = []
     openai_web_search_calls = 0
-    generation_date_iso = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    generation_date_iso = get_generation_date_iso()
 
     status_box = status_placeholder.status(
         "Starting generation...",
@@ -393,9 +497,22 @@ if run_button:
         st.write("Detected home team:", home_team)
         st.write("Detected away team:", away_team)
 
-    match_date_iso = match_info.get("match_date_iso") or convert_date_text_to_iso(
+    raw_match_date_iso = match_info.get("match_date_iso") or convert_date_text_to_iso(
         match_info.get("match_date_text")
     )
+
+    if is_future_or_today_date(raw_match_date_iso):
+        match_date_iso = raw_match_date_iso
+    else:
+        match_date_iso = None
+        match_info["match_date_iso"] = None
+        match_info["match_date_text"] = None
+
+        st.warning(
+            "The page returned a missing, past, or invalid match date. "
+            "Because Kickform forecast pages should only be future matches, "
+            "the app will search upcoming fixtures instead."
+        )
 
     if not home_team or not away_team:
         status_box.update(label="Page parsing failed: teams could not be detected.", state="error")
@@ -430,13 +547,23 @@ if run_button:
     api = ApiFootballClient(api_football_key)
 
     api_league_id = get_api_football_league_id(match_info.get("competition"))
-    api_season = get_api_football_season(match_date_iso)
+    api_season = get_api_football_season(match_date_iso or generation_date_iso)
 
     status_box.update(label="Step 2/10: Connecting to API-Football and resolving teams...", state="running")
 
     with st.spinner("Resolving teams in API-Football..."):
-        home_results = api.search_team(home_team)
-        away_results = api.search_team(away_team)
+        home_results = []
+        away_results = []
+
+        if api_league_id and api_season:
+            home_results = api.search_team_in_league(home_team, api_league_id, api_season)
+            away_results = api.search_team_in_league(away_team, api_league_id, api_season)
+
+        if not home_results:
+            home_results = api.search_team(home_team)
+
+        if not away_results:
+            away_results = api.search_team(away_team)
 
         home_api_team = pick_best_team_match(home_results, home_team)
         away_api_team = pick_best_team_match(away_results, away_team)
@@ -468,10 +595,10 @@ if run_button:
     fixture = None
     injuries = []
 
-    if match_date_iso:
-        status_box.update(label="Step 3/10: Finding exact fixture in API-Football...", state="running")
+    status_box.update(label="Step 3/10: Finding upcoming fixture in API-Football...", state="running")
 
-        with st.spinner("Finding fixture in API-Football..."):
+    with st.spinner("Finding fixture in API-Football..."):
+        if match_date_iso:
             candidate_fixtures = api.get_fixtures_for_team_date(
                 team_id=home_team_id,
                 date=match_date_iso,
@@ -492,8 +619,8 @@ if run_button:
                     match_date_iso=match_date_iso,
                     season=api_season,
                     league_id=api_league_id,
-                    days_before=3,
-                    days_after=3,
+                    days_before=0,
+                    days_after=14,
                 )
 
                 fixture = find_fixture_between_teams(
@@ -501,38 +628,56 @@ if run_button:
                     home_team_id,
                     away_team_id,
                 )
-
-        if fixture:
-            with debug_expander:
-                st.subheader("3. Matched fixture")
-                st.json(fixture)
-
-            fixture_id = fixture["fixture"]["id"]
-
-            try:
-                with st.spinner("Fetching injuries for fixture..."):
-                    injuries = api.get_injuries_for_fixture(fixture_id)
-            except Exception as e:
-                st.warning(f"Could not fetch injuries: {e}")
         else:
-            status_box.update(
-                label="Exact fixture not found in API-Football. Continuing with team context only...",
-                state="running",
+            fixture = find_future_fixture_between_teams(
+                api=api,
+                home_team_id=home_team_id,
+                away_team_id=away_team_id,
+                generation_date_iso=generation_date_iso,
+                api_season=api_season,
+                api_league_id=api_league_id,
+                days_ahead=60,
             )
 
-            st.warning(
-                "Could not find exact fixture in API-Football. "
-                "The app will continue with team context only."
-            )
+    if fixture:
+        with debug_expander:
+            st.subheader("3. Matched fixture")
+            st.json(fixture)
 
-    if match_date_iso:
-        match_date = dt.date.fromisoformat(match_date_iso)
-        from_date = (match_date - dt.timedelta(days=120)).isoformat()
-        to_date = (match_date - dt.timedelta(days=1)).isoformat()
+        fixture_id = fixture["fixture"]["id"]
+        fixture_date_iso = fixture.get("fixture", {}).get("date", "")[:10]
+
+        if fixture_date_iso:
+            match_date_iso = fixture_date_iso
+            match_info["match_date_iso"] = fixture_date_iso
+            match_info["match_date_text"] = fixture_date_iso
+            api_season = get_api_football_season(match_date_iso)
+
+        try:
+            with st.spinner("Fetching injuries for fixture..."):
+                injuries = api.get_injuries_for_fixture(fixture_id)
+        except Exception as e:
+            st.warning(f"Could not fetch injuries: {e}")
     else:
-        today = dt.date.today()
-        from_date = (today - dt.timedelta(days=120)).isoformat()
-        to_date = today.isoformat()
+        status_box.update(
+            label="Exact fixture not found in API-Football. Continuing with team context only...",
+            state="running",
+        )
+
+        st.warning(
+            "Could not find exact fixture in API-Football. "
+            "The app will continue with team context only."
+        )
+
+    form_reference_date_iso = match_date_iso or generation_date_iso
+    form_reference_date = dt.date.fromisoformat(form_reference_date_iso)
+
+    from_date = (form_reference_date - dt.timedelta(days=120)).isoformat()
+    to_date = (form_reference_date - dt.timedelta(days=1)).isoformat()
+
+    # If we know the match date, only use matches before the match.
+    # If not, use matches before today/generation date.
+    to_date = (form_reference_date - dt.timedelta(days=1)).isoformat()
 
     status_box.update(label="Step 4/10: Fetching recent team form...", state="running")
 
@@ -675,11 +820,11 @@ if run_button:
 
                 with scol1:
                     st.write(home_team)
-                    st.json(home_standing)
+                    show_json_or_message(home_standing, "No standings found for the home team.")
 
                 with scol2:
                     st.write(away_team)
-                    st.json(away_standing)
+                    show_json_or_message(away_standing, "No standings found for the away team.")
 
         except Exception as e:
             st.warning(f"Could not fetch standings: {e}")
@@ -895,27 +1040,6 @@ if run_button:
     else:
         status_box.update(label="Generation completed, but validation needs review.", state="error")
 
-    with final_result_placeholder.container():
-        st.subheader("✅ Final result for review")
-
-        if output_language == "de":
-            st.caption("Finale deutsche Version für Sportwettenvergleich.net")
-        else:
-            st.caption("Final English version for ThePuntersPage.com")
-
-        if approved:
-            st.success("Approved by validation.")
-        else:
-            st.warning("Validation did not pass automatically. Please review before publishing.")
-
-        st.markdown(final_explanation)
-
-        st.download_button(
-            label="Download final text",
-            data=final_explanation,
-            file_name="kickform_final_explanation.txt",
-            mime="text/plain",
-        )
 
     with debug_expander:
         st.subheader("10. Final explanation")
@@ -994,6 +1118,47 @@ if run_button:
         6,
     )
 
+    with final_result_placeholder.container():
+        st.subheader("✅ Final result for review")
+
+        if output_language == "de":
+            st.caption("Finale deutsche Version für Sportwettenvergleich.net")
+        else:
+            st.caption("Final English version for ThePuntersPage.com")
+
+        if approved:
+            st.success("Approved by validation.")
+        else:
+            st.warning("Validation did not pass automatically. Please review before publishing.")
+
+        st.markdown(final_explanation)
+
+        st.divider()
+
+        render_news_context_summary(news_facts, max_items=8)
+
+        st.divider()
+
+        st.markdown("### Generation cost")
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric("Total", f"${total_generation_cost:.4f}")
+
+        with c2:
+            st.metric("OpenAI", f"${total_openai_cost:.4f}")
+
+        with c3:
+            st.metric("API-Football", f"${api_football_total_cost:.4f}")
+
+        st.download_button(
+            label="Download final text",
+            data=final_explanation,
+            file_name="kickform_final_explanation.txt",
+            mime="text/plain",
+        )
+
     with debug_expander:
         st.subheader("12. Cost report")
 
@@ -1012,7 +1177,7 @@ if run_button:
                     "total_tokens": total_tokens,
                     "total_openai_cost_usd": round(total_openai_cost, 6),
                     "web_search_calls": openai_web_search_calls,
-                    "web_search_cost_usd": 0,
+                    "web_search_cost_usd": news_cost_report["web_search_cost_usd"],
                 },
                 "writer": {
                     "model": openai_writer_model,

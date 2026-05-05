@@ -141,6 +141,49 @@ class ApiFootballClient:
         }
         self.debug_calls = []
 
+    def search_team_in_league(
+        self,
+        team_name: str,
+        league_id: int,
+        season: int,
+    ) -> List[Dict[str, Any]]:
+        aliases = generate_team_search_aliases(team_name)
+
+        all_results = []
+        seen_team_ids = set()
+
+        for alias in aliases:
+            safe_team_name = sanitize_team_search_name(alias)
+
+            if not safe_team_name:
+                continue
+
+            try:
+                data = self.get(
+                    "/teams",
+                    {
+                        "search": safe_team_name,
+                        "league": league_id,
+                        "season": season,
+                    },
+                )
+            except Exception:
+                continue
+
+            results = data.get("response", [])
+
+            for item in results:
+                team_id = item.get("team", {}).get("id")
+
+                if team_id and team_id not in seen_team_ids:
+                    all_results.append(item)
+                    seen_team_ids.add(team_id)
+
+            if all_results:
+                break
+
+        return all_results
+
     def get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         url = f"{API_BASE}{path}"
         params = params or {}
@@ -178,6 +221,46 @@ class ApiFootballClient:
             )
 
         return data
+
+    def search_team_in_league(
+        self,
+        team_name: str,
+        league_id: int,
+        season: int,
+    ) -> List[Dict[str, Any]]:
+        aliases = generate_team_search_aliases(team_name)
+
+        all_results = []
+        seen_team_ids = set()
+
+        for alias in aliases:
+            safe_team_name = sanitize_team_search_name(alias)
+
+            if not safe_team_name:
+                continue
+
+            try:
+                data = self.get(
+                    "/teams",
+                    {
+                        "search": safe_team_name,
+                        "league": league_id,
+                        "season": season,
+                    },
+                )
+            except Exception:
+                continue
+
+            results = data.get("response", [])
+
+            for item in results:
+                team_id = item.get("team", {}).get("id")
+
+                if team_id and team_id not in seen_team_ids:
+                    all_results.append(item)
+                    seen_team_ids.add(team_id)
+
+        return all_results
 
     def search_team(self, team_name: str) -> List[Dict[str, Any]]:
         aliases = generate_team_search_aliases(team_name)
