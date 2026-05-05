@@ -275,8 +275,11 @@ debug_expander = st.expander(
 
 use_news_research = st.checkbox(
     "Use trusted web news research",
-    value=False,
-    help="Searches trusted news sources for team news, injuries, suspensions, manager quotes, and other current context."
+    value=True,
+    help=(
+        "Recommended. Searches recent trusted sources for injuries, suspensions, transfers, "
+        "manager quotes, player availability, morale, rotation and other match context."
+    )
 )
 
 if run_button:
@@ -316,6 +319,7 @@ if run_button:
     repair_usage_items = []
     news_usage_items = []
     openai_web_search_calls = 0
+    generation_date_iso = dt.datetime.now(dt.timezone.utc).date().isoformat()
 
     status_box = status_placeholder.status(
         "Starting generation...",
@@ -726,9 +730,14 @@ if run_button:
                 away_team=away_team,
                 competition=match_info.get("competition"),
                 match_date_iso=match_date_iso,
+                generation_date_iso=generation_date_iso,
             )
 
         news_facts = news_result.get("facts", [])
+        status_box.update(
+            label=f"Step 7/10: Found {len(news_facts)} approved fresh news facts.",
+            state="running",
+        )       
         news_usage_items.append(news_result.get("usage"))
         openai_web_search_calls += news_result.get("web_search_calls", 0)
 

@@ -780,14 +780,17 @@ def build_evidence(
             source_url = news_item.get("source_url")
             news_type = news_item.get("type", "news")
             confidence = news_item.get("confidence", "medium")
+            why_it_matters = news_item.get("why_it_matters")
+            published_date = news_item.get("published_date")
 
             if claim:
                 facts.append(
                     fact(
                         f"F{i}",
                         (
-                            f"News context: {claim} "
-                            f"(source: {source_title or source_url}; confidence: {confidence})."
+                            f"Fresh news context from {published_date}: {claim} "
+                            f"Why it matters: {why_it_matters or 'Relevant to the match context.'} "
+                            f"(confidence: {confidence})."
                         ),
                         source_url or "Web news research",
                         f"news_{news_type}",
